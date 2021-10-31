@@ -56,7 +56,18 @@ public class Function extends Value {
 
     @Override
     public String toString() {
-        //todo
-        return "";
+        StringBuilder sb = new StringBuilder();
+        sb.append(((FunctionType) this.type).getRetTType())
+                .append(" @")
+                .append(this.name)
+                .append("(");
+        this.paramList.forEach(
+                param -> {
+                    sb.append(param).append(",");
+                }
+        );
+        if (paramList.size() != 0) sb.deleteCharAt(sb.length() - 1);//把最后一个逗号删掉
+        sb.append(")");
+        return sb.toString();
     }
 }
