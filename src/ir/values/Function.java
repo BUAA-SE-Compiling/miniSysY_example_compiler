@@ -11,12 +11,12 @@ import java.util.List;
 
 // 函数类
 public class Function extends Value {
-    private boolean isBuiltin = false;
-    public IList<BasicBlock, Function> list;
+    private boolean isBuiltin = false;//是否是库函数
+    public IList<BasicBlock, Function> list;//src/util/IList
     public INode<Function, Module> node;
-    private ArrayList<Function> caller;
-    private ArrayList<Function> callee;
-    private ArrayList<Param> paramList;
+    private ArrayList<Function> caller;//会在函数内联的时候被用到，用来记录调用自己的函数
+    private ArrayList<Function> callee;//用来记录自己调用的函数
+    private ArrayList<Param> paramList;//形参列表
 
     public Function(Type type, boolean isBuiltin) {
         super(type);

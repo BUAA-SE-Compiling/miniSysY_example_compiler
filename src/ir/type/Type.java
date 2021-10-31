@@ -2,6 +2,12 @@ package ir.type;
 
 import java.util.ArrayList;
 
+/*
+* Type 是所有类型的基类
+* LLVM IR 是强类型的语言，不允许隐式转换
+*/
+
+
 public class Type {
 
     //给没有Type的Value
@@ -42,6 +48,8 @@ public class Type {
     public boolean isFunctionTy() {return this instanceof FunctionType;}
 
     public boolean isArrayTy() {return this instanceof ArrayType;}
+
+    public boolean isPointerTy() {return this instanceof PointerType;}
 
     public boolean isIntegerType() {return this instanceof IntegerType;}
 }

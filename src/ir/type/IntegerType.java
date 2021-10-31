@@ -6,8 +6,8 @@ package ir.type;
  * numBits是包含的位数
  * **/
 public class IntegerType extends Type {
-    public static final IntegerType i32 = new IntegerType(32);
-    public static final IntegerType i1 = new IntegerType(1);
+    public static final IntegerType i32 = new IntegerType(32);//i32 type,仅携带类型信息，因此用单例
+    public static final IntegerType i1 = new IntegerType(1);//同上
 
     public static IntegerType getI32() {return i32;}
 

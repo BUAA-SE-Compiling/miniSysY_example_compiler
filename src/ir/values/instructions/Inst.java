@@ -6,7 +6,12 @@ import ir.type.Type;
 import ir.values.BasicBlock;
 import util.IList;
 import util.IList.INode;
-
+/*
+* Instruction 类，是所有 Inst 的父类
+* 它本身是 User 的子类，可见所有的 Inst 都是 User
+* 我们通过指令的 TAG 来判断指令的种类
+* Inode 的介绍请看 src/util/IList，这是一个侵入式链表的设计，用来挂载到其所在的BB上
+* */
 public class Inst extends User {
     public TAG tag;
     public INode<Inst, BasicBlock> node;

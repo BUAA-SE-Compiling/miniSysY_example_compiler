@@ -14,6 +14,8 @@ import ir.values.instructions.Inst;
 import ir.values.instructions.MemInst;
 import ir.values.instructions.TerminatorInst;
 
+import java.util.ArrayList;
+
 public class IRBuilder {
 
     private static final IRBuilder b = new IRBuilder();
@@ -35,7 +37,7 @@ public class IRBuilder {
         return ConstantInt.get(val);
     }
 
-    public ConstantArray getConstantArray() {return null;}// TODO: 2021/10/25
+    public ConstantArray getConstantArray(Type ty, ArrayList<Constant> constants) {return new ConstantArray(ty, constants);}
 
     public GlobalVariable getGlobalVariable(String name, Type type, Constant init) {
         var tmp = new GlobalVariable(name, type);

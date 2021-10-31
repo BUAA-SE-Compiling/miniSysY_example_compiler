@@ -9,6 +9,7 @@ import ir.values.Function;
 import java.util.ArrayList;
 
 public class TerminatorInst {
+    //函数调用指令，第一个 operand 是函数，后面的是传入的实参
     public static class Call extends Inst {
         public Call(Function function, ArrayList<Value> args) {
             super(((FunctionType) function.type).getRetTType(), TAG.Call, args.size() + 1);
@@ -53,7 +54,7 @@ public class TerminatorInst {
             return sb.toString();
         }
     }
-
+    //分支跳转指令，有条件跳转中的第一个 operand 是条件变量，是一个 i1 的值，这个值为 1 会跳往 trueblock,为 0 会跳往 falseblock
     public static class Br extends Inst {
         public Br(Value cond, BasicBlock trueBlock, BasicBlock falseBlock) {//有条件跳转
             super(Type.LabelType.getType(), TAG.Br, 3);

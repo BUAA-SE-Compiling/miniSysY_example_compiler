@@ -3,7 +3,7 @@ package ir.values;
 import ir.User;
 import ir.type.PointerType;
 import ir.type.Type;
-
+//全局变量，所有全局变量都是 PointerType的
 public class GlobalVariable extends User {
     public boolean isConst = false;
     public Constant init;//初始化时候的值是需要存储的，但之后进行值的变动就不需要存储了。是体现在指令中的

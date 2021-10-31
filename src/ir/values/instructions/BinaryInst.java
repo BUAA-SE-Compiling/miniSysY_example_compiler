@@ -3,7 +3,7 @@ package ir.values.instructions;
 import ir.Value;
 import ir.type.IntegerType;
 import ir.type.Type;
-
+// 二元操作指令，加减乘除比较都能够通过这个类来表达，lhs是左手元素，rhs是右手元素
 public class BinaryInst extends Inst {
 
     public BinaryInst(Type type, TAG tag, Value lhs, Value rhs) {

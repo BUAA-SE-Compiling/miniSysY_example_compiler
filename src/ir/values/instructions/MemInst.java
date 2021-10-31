@@ -1,10 +1,14 @@
 package ir.values.instructions;
 
 import ir.Value;
+import ir.type.ArrayType;
 import ir.type.PointerType;
 import ir.type.Type;
 
+import java.util.ArrayList;
+
 public class MemInst {
+    // alloca 指令是 pointer 类型的，用来向内存中申请一块空间
     public static class Alloca extends Inst {
         private boolean isInit = false;
         public final Type allocated;
@@ -24,6 +28,7 @@ public class MemInst {
         }
     }
 
+    // load指令用于从内存的某个位置中读出值，它的类型是不确定的（当然在本实验中是确定的，只有i32）
     public static class Load extends Inst {
 
         public Load(Type type, Value v) {
@@ -45,6 +50,7 @@ public class MemInst {
         }
     }
 
+    //store 指令用于将某个值存入某个内存位置，store指令是不需要名字的
     public static class Store extends Inst {
         public Store(Value val, Value pointer) {
             super(Type.VoidType.getType(), TAG.Store, 2);
@@ -53,10 +59,17 @@ public class MemInst {
             this.needName = false;
         }
 
+        // TODO: 2021/10/31
+        @Override
+        public String toString() {
+            return super.toString();
+        }
+
         public Value getVal() {return this.getOP(0);}
 
         public Value getPointer() {return this.getOP(1);}
     }
+//zext 是用于进行类型转换的指令，用于进行 0 拓展，LLVM IR 中不允许隐式类型转换的存在，从 i1（通常出现在比较结果中转换到 i32 需要用到 zext
 
     public static class Zext extends Inst {
         private Type destTy;//will only be i32 in miniSysY
@@ -69,6 +82,7 @@ public class MemInst {
 
         @Override
         public String toString() {
+            //只有从 i1 zext 到 i32 的情况
             return this.name
                     + " = "
                     + "zext i1 "
@@ -77,10 +91,38 @@ public class MemInst {
         }
     }
 
+    //**计算**这个指针指向的元素的**类型**
+    private static Type getElementType(Value ptr, ArrayList<Value> indices) {
+        assert ptr.type.isPointerTy();
+        Type type = ((PointerType) ptr.type).getContained();
+        if (type.isIntegerType()) return type;
+        else if (type.isArrayTy()) {
+            for (int i = 0; i < indices.size(); i++) {
+                type = ((ArrayType) type).getEleType();
+            }
+            return type;
+        }
+        return null;
+    }
+
+
+    // 第一个 operand 是 pointer ，之后的 operand 是 indice
     public static class GetElementPtr extends Inst {
-        public GetElementPtr(Type type, TAG tag, int numOP) {
-            super(type, tag, numOP);
-            //todo
+        private final Type elementType_;
+
+        public GetElementPtr(Value pointer, ArrayList<Value> idx) {
+            super(new PointerType(getElementType(pointer, idx)), TAG.GEP, idx.size() + 1);
+            setOperand(pointer, 0);
+            for (int i = 0; i < idx.size(); i++) {
+                setOperand(idx.get(i), i + 1);
+            }
+            elementType_ = getElementType(pointer, idx);
+        }
+
+        // TODO: 2021/10/31
+        @Override
+        public String toString() {
+            return "";
         }
     }
 

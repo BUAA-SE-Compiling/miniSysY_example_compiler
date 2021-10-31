@@ -3,7 +3,7 @@ package ir.type;
 public class ArrayType extends Type {
     private int intContains; //有几个int型的值（因为sysy的base type只有int）
     private Type contained; //ArrayType contain的是什么type
-    private int num_elements;
+    private int num_elements;//有几个元素，值得一提的是，LLVM IR 是通过多层嵌套的关系来表示多维数组的，比如一个三位数组可能是[2 x[2 x [2 x i32]]]
 
     public Type getEleType() {return contained;}
 
@@ -24,6 +24,6 @@ public class ArrayType extends Type {
 
     @Override
     public String toString() {
-        return "[" + num_elements + " x " + contained.toString() + "}";
+        return "[" + num_elements + " x " + contained.toString() + "]";
     }
 }

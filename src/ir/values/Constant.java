@@ -5,7 +5,7 @@ import ir.type.IntegerType;
 import ir.type.Type;
 
 import java.util.ArrayList;
-
+//常量类型，分为常量数值和常量数组
 public class Constant extends User {
     public Constant(Type type) {
         super(type);
