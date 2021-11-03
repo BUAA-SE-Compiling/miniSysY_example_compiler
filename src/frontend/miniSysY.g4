@@ -1,48 +1,135 @@
-/***
-对于文法已经确定的语言来说，使用 frontend 实现编译器是比较舒适的
-但是如果文法中途发生变动，就需要每次变动的时候都重新生成一边代码
-
-> antlr4 -no-listener -visitor miniSysY.g4
-生成的是 visitor 模式的代码，这里有一个简短的教程
-https://wizardforcel.gitbooks.io/antlr4-short-course/content/calculator-visitor.html
-***/
 grammar miniSysY;
 
 program
-  : compUnit
-  ;
-
+   : compUnit
+   ;
 
 compUnit
-  : funcDef
-  ;
+   : (funcDef | decl)+
+   ;
+
+decl
+   : constDecl
+   | varDecl
+   ;
+
+constDecl
+   : CONST_KW bType constDef (COMMA constDef)* SEMICOLON
+   ;
+
+bType
+   : INT_KW
+   ;
+
+constDef
+   : IDENT (L_BRACKT constExp R_BRACKT)* ASSIGN constInitVal
+   ;
+
+constInitVal
+   : constExp
+   | (L_BRACE (constInitVal (COMMA constInitVal)*)? R_BRACE)
+   ;
+
+varDecl
+   : bType varDef (COMMA varDef)* SEMICOLON
+   ;
+
+varDef
+   : IDENT (L_BRACKT constExp R_BRACKT)* (ASSIGN initVal)?
+   ;
+
+initVal
+   : exp
+   | (L_BRACE (initVal (COMMA initVal)*)? R_BRACE)
+   ;
 
 funcDef
-  : funcType ident LPAREN RPAREN block
-  ;
+   : funcType IDENT L_PAREN funcFParams? R_PAREN block
+   ;
 
 funcType
-  : INT
-  ;
+   : VOID_KW
+   | INT_KW
+   ;
 
-ident
-  : MAIN
-  ;
+funcFParams
+   : funcFParam (COMMA funcFParam)*
+   ;
+
+funcFParam
+   : bType IDENT (L_BRACKT R_BRACKT (L_BRACKT exp R_BRACKT)*)?
+   ;
 
 block
-  : LBRACE stmt RBRACE
-  ;
+   : L_BRACE blockItem* R_BRACE
+   ;
+
+blockItem
+   : constDecl
+   | varDecl
+   | stmt
+   ;
 
 stmt
-  : RETURN number ';';
+   : assignStmt
+   | expStmt
+   | block
+   | conditionStmt
+   | whileStmt
+   | breakStmt
+   | continueStmt
+   | returnStmt
+   ;
 
+assignStmt
+   : lVal ASSIGN exp SEMICOLON
+   ;
 
+expStmt
+   : exp? SEMICOLON
+   ;
 
-SEMI : ';' ;
+conditionStmt
+   : IF_KW L_PAREN cond R_PAREN stmt (ELSE_KW stmt)?
+   ;
+
+whileStmt
+   : WHILE_KW L_PAREN cond R_PAREN stmt
+   ;
+
+breakStmt
+   : BREAK_KW SEMICOLON
+   ;
+
+continueStmt
+   : CONTINUE_KW SEMICOLON
+   ;
+
+returnStmt
+   : RETURN_KW (exp)? SEMICOLON
+   ;
+
+exp
+   : addExp
+   ;
+
+cond
+   : lOrExp
+   ;
+
+lVal
+   : IDENT (L_BRACKT exp R_BRACKT)*
+   ;
+
+primaryExp
+   : (L_PAREN exp R_PAREN)
+   | lVal
+   | number
+   ;
 
 number
-  :intConst
-  ;
+   : intConst
+   ;
 
 intConst
    : DECIMAL_CONST
@@ -50,8 +137,123 @@ intConst
    | HEXADECIMAL_CONST
    ;
 
+unaryExp
+   : primaryExp
+   | callee
+   | (unaryOp unaryExp)
+   ;
 
-//注意，以这种方式定义的话，0 是 8 进制的，不过没有影响。
+callee
+   : IDENT L_PAREN funcRParams? R_PAREN
+   ;
+
+unaryOp
+   : PLUS
+   | MINUS
+   | NOT
+   ;
+
+funcRParams
+   : param (COMMA param)*
+   ;
+
+param
+   : exp
+   | STRING
+   ;
+
+mulExp
+   : unaryExp (mulOp unaryExp)*
+   ; // eliminate left-recursive
+
+mulOp
+   : MUL
+   | DIV
+   | MOD
+   ;
+
+addExp
+   : mulExp (addOp mulExp)*
+   ; // eliminate left-recursive
+
+addOp
+   : PLUS
+   | MINUS
+   ;
+
+relExp
+   : addExp (relOp addExp)*
+   ; // eliminate left-recursive
+
+relOp
+   : LT
+   | GT
+   | LE
+   | GE
+   ;
+
+eqExp
+   : relExp (eqOp relExp)*
+   ;
+
+eqOp
+   : EQ
+   | NEQ
+   ;
+
+lAndExp
+   : eqExp (AND eqExp)*
+   ;
+
+lOrExp
+   : lAndExp (OR lAndExp)*
+   ;
+
+constExp
+   : addExp
+   ;
+
+CONST_KW
+   : 'const'
+   ;
+
+INT_KW
+   : 'int'
+   ;
+
+VOID_KW
+   : 'void'
+   ;
+
+IF_KW
+   : 'if'
+   ;
+
+ELSE_KW
+   : 'else'
+   ;
+
+WHILE_KW
+   : 'while'
+   ;
+
+BREAK_KW
+   : 'break'
+   ;
+
+CONTINUE_KW
+   : 'continue'
+   ;
+
+RETURN_KW
+   : 'return'
+   ;
+
+IDENT
+   : [_a-zA-Z]
+   | [_a-zA-Z] [_a-zA-Z0-9]+
+   ;
+
 DECIMAL_CONST
    : [1-9]
    | [1-9] [0-9]+
@@ -66,23 +268,122 @@ HEXADECIMAL_CONST
    : ('0x' | '0X') [a-fA-F0-9]+
    ;
 
+STRING
+   : DOUBLE_QUOTE REGULAR_CHAR*? DOUBLE_QUOTE
+   ;
+
+fragment REGULAR_CHAR
+   : (ESC | .)
+   ;
+
+fragment ESC
+   : '\\"' | '\\\\'
+   ;
+
+PLUS
+   : '+'
+   ;
+
+MINUS
+   : '-'
+   ;
+
+NOT
+   : '!'
+   ;
+
+MUL
+   : '*'
+   ;
+
+DIV
+   : '/'
+   ;
+
+MOD
+   : '%'
+   ;
+
+ASSIGN
+   : '='
+   ;
+
+EQ
+   : '=='
+   ;
+
+NEQ
+   : '!='
+   ;
+
+LT
+   : '<'
+   ;
+
+GT
+   : '>'
+   ;
+
+LE
+   : '<='
+   ;
+
+GE
+   : '>='
+   ;
+
+AND
+   : '&&'
+   ;
+
+OR
+   : '||'
+   ;
+
+L_PAREN
+   : '('
+   ;
+
+R_PAREN
+   : ')'
+   ;
+
+L_BRACE
+   : '{'
+   ;
+
+R_BRACE
+   : '}'
+   ;
+
+L_BRACKT
+   : '['
+   ;
+
+R_BRACKT
+   : ']'
+   ;
+
+COMMA
+   : ','
+   ;
+
+SEMICOLON
+   : ';'
+   ;
+
+DOUBLE_QUOTE
+   : '"'
+   ;
+
+WS
+   : [ \r\n\t]+ -> skip
+   ;
+
 LINE_COMMENT
-   : '//' ~ [\r\n]* -> skip // 如果符合 注释的 pattern，直接 skip，下同
+   : '//' ~ [\r\n]* -> skip
    ;
 
 MULTILINE_COMMENT
    : '/*' .*? '*/' -> skip
    ;
-
-WS //空白符跳过
-   : [ \r\n\t]+ -> skip
-   ;
-
-
-LPAREN : '(' ;
-RPAREN : ')' ;
-INT : 'int' ;
-MAIN : 'main' ;
-LBRACE : '{' ;
-RBRACE : '}' ;
-RETURN : 'return' ;

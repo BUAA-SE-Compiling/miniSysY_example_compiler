@@ -13,6 +13,4 @@ public class Scope {
         tables = new ArrayList<>();
         tables.add(new HashMap<>());
     }
-
-
 }

@@ -26,6 +26,7 @@ public class IRBuilder {
 
     private BasicBlock curBB;
 
+    //设置当前build的基本块，用buildxxx的函数会把这个指令插入到这个基本块的末尾
     public void setInsertPoint(BasicBlock bb) {
         curBB = bb;
     }
