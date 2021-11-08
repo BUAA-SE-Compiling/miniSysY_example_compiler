@@ -2,99 +2,95 @@ package util;
 
 import java.util.Iterator;
 
-import util.IList.INode;
-
 /***
  * 这是一个侵入式链表的非常规实现
  * 侵入式链表和一般链表的区别在于
  * 一般的链表是链表结点中存储了元素
  * Node{
  *   YourEleType yourEle;
+ *   Node prev;
+ *   Node succ;
  *   }
- * 而侵入式链表是元素中存储了链表
+ * 而侵入式链表是元素中存储了链表结点
  * YourEleType{
  *   Node prev;
- *   Node next;
+ *   Node succ;
  * }
- * 这样做的好处是你在拿到一个元素的时候，
+ * 这样做的好处是你在拿到一个元素(而不是这个元素的Node)的时候，
  * 能够很方便地知道这个元素的前一个元素和后一个元素是什么
  *
  * 如果你们这学期的OS实验还是 pintos,
  * 那实际上这个链表的和 pintos 里面的内核链表是差不多的
  * ps: linux 里面的链表也是这个设计，所以这种链表又称作内核链表
  * ***/
-
+//
 public class IList<T, P> implements Iterable<IList.INode<T, P>> {
-    /***
-     * 链表头，
-     * 因为我们要实现的数据结构的包含关系是
-     * Module contains Function and GlobalVariable
-     * Function contains BasicBlock
-     * BasicBlock contains Instruction
-     * 可以看出来是一个多层的包含关系
-     * 所以我们在这里实现了一个同样能够满足多层的包含关系的链表
-     ***/
     private P val;
     //持有链表头的元素，比如一个 BasicBlock 持有了一个包含多个 Inst 的链表
     // ,那这个val就是这个BasicBlock
-    private INode<T, P> entry;//这个链表的表头
-    private INode<T, P> last;//表尾
-    private int numNode;//节点数
+    private INode<T, P> head;//邵兵结点，不存储数据
+    private INode<T, P> trailer;//邵兵结点
+    private int numNode = 0;//节点数
 
     public IList(P val) {
         this.val = val;
-        entry = last = null;
+        head = new INode<>();
+        trailer = new INode<>();
     }
 
     public int getNumNode() {return numNode;}
 
     public P getVal() {return val;}
 
-    public INode<T, P> getEntry() {return entry;}
+    public INode<T, P> getEntry() {return head.succ;}
 
-    public INode<T, P> getLast() {return last;}
-
-    public void setEntry(INode<T, P> entry) {this.entry = entry;}
-
-    public void setLast(INode<T, P> last) {this.last = last;}
+    public INode<T, P> getLast() {return trailer.prev;}
 
     @Override
-    public Iterator<INode<T, P>> iterator() {return new IIterator(entry);}
-    //给 Ilist 实现了迭代器接口,不过没实现删除接口
+    public Iterator<INode<T, P>> iterator() {return new IIterator(head, trailer);}
+
     class IIterator implements Iterator<INode<T, P>> {
+        INode<T, P> head;
+        INode<T, P> trailer;
+        INode<T, P> tmp;
 
-        INode<T, P> tmp = new INode<>(null);
-        INode<T, P> nxt = null;
-
-        IIterator(INode<T, P> head) {
-            tmp.next = head;
+        IIterator(INode<T, P> head, INode<T, P> trailer) {
+            this.head = head;
+            this.trailer = trailer;
+            tmp = head;
         }
 
         @Override
         public boolean hasNext() {
-            return nxt != null || tmp.next != null;
+            return tmp.succ != trailer;
         }
 
         @Override
         public INode<T, P> next() {
-            if (nxt == null) {
-                tmp = tmp.next;
-            } else {
-                tmp = nxt;
-            }
-            nxt = null;
-            return tmp;
+            var t = tmp;
+            tmp = tmp.succ;
+            return t;
+        }
+
+        @Override
+        public void remove() {
+            throw new UnsupportedOperationException();
         }
     }
 
     public static class INode<T, P> {
-
+        public final boolean isguard;
         private T val;
         private INode<T, P> prev = null;//前驱
-        private INode<T, P> next = null;//后继
+        private INode<T, P> succ = null;//后继
         private IList<T, P> parent = null;
 
-        public INode(T t) {this.val = t;}
+        public INode() {this.isguard = true;}//只用来产生哨兵
+
+        public INode(T t) {
+            this.val = t;
+            this.isguard = false;
+        }
 
         public T getVal() {return val;}
 
@@ -106,56 +102,50 @@ public class IList<T, P> implements Iterable<IList.INode<T, P>> {
 
         public INode<T, P> getPrev() {return prev;}
 
-        public INode<T, P> getNext() {return next;}
+        public INode<T, P> getNext() {return succ;}
 
         //将自己插入prev后面
-        public void insertAfter(INode<T, P> prev) {
+        public void insertAsPrevOf(INode<T, P> prev) {
             this.parent = prev.parent;
             this.parent.numNode++;
-            if (prev.getParent().getLast() == prev) prev.getParent().setLast(this);
             this.prev = prev;
-            this.next = prev.next;
-            prev.next = this;
-            if (this.next != null) this.next.prev = this;
+            this.succ = prev.succ;
+            prev.succ = this;
+            this.succ.prev = this;
         }
 
         //将自己插入目标结点前面
-        public void insertBefore(INode<T, P> next) {
-            this.parent = next.parent;
+        public void insertAsSuccOf(INode<T, P> succ) {
+            this.parent = succ.parent;
             this.parent.numNode++;
-            if (next.getParent().getEntry() == next) next.getParent().setEntry(this);
-            this.prev = next.prev;
-            this.next = next;
-            next.prev = this;
-            if (this.prev != null) this.prev.next = this;
+            this.prev = succ.prev;
+            this.succ = succ;
+            succ.prev = this;
+            this.prev.succ = this;
         }
 
         //将自己插入目标IList的开头
         public void insertAtEntry(IList<T, P> father) {
             this.setParent(father);
-            if (father.getEntry() == null && father.getLast() == null) {
-                father.numNode++;
-                father.setEntry(this);
-                father.setLast(this);
-            } else {
-                insertBefore(father.getEntry());
-            }
+            father.numNode++;
+            insertAsSuccOf(father.head);
         }
 
 
         // 将自己插入目标IList的末尾
-
         public void insertAtEnd(IList<T, P> father) {
             this.setParent(father);
-            if (father.getEntry() == null && father.getLast() == null) {
-                father.numNode++;
-                father.setEntry(this);
-                father.setLast(this);
-                this.prev = null;
-                this.next = null;
-            } else {
-                insertAfter(father.getLast());
-            }
+            father.numNode++;
+            insertAsPrevOf(father.trailer);
+        }
+
+        public boolean removeSelf() {
+            if (this.parent==null)return false;
+            this.succ.prev=this.prev;
+            this.prev.succ=this.succ;
+            this.parent.numNode--;
+            this.parent=null;
+            return true;
         }
     }
 
