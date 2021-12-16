@@ -1,5 +1,7 @@
-package ir.values;
+package ir;
 
+import ir.values.Function;
+import ir.values.GlobalVariable;
 import util.IList;
 
 import java.util.ArrayList;

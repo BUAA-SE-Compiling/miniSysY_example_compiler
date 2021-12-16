@@ -20,16 +20,23 @@ public class IRBuilder {
 
     private static final IRBuilder b = new IRBuilder();
 
-    public static IRBuilder getInstance() {
-        return b;
-    }
+    public static IRBuilder getInstance() {return b;}
 
     private BasicBlock curBB;
+    private Function curFunc;
+    private Module m;//其实是不会变的
 
-    //设置当前build的基本块，用buildxxx的函数会把这个指令插入到这个基本块的末尾
+    public void setModule(Module m) {this.m = m;}
+
+    public void setFunc(Function f) {curFunc = f;}
+
+    public Function curFunc() {return curFunc;}
+
     public void setInsertPoint(BasicBlock bb) {
         curBB = bb;
     }
+
+    public BasicBlock curBB() {return curBB;}
 
     private IRBuilder() {
     }
@@ -40,14 +47,17 @@ public class IRBuilder {
 
     public ConstantArray getConstantArray(Type ty, ArrayList<Constant> constants) {return new ConstantArray(ty, constants);}
 
-    public GlobalVariable getGlobalVariable(String name, Type type, Constant init) {
-        var tmp = new GlobalVariable(name, type);
-        tmp.init = init;
-        return tmp;
+    public GlobalVariable getGlobalVariable(String name, Type type, Constant initValue) {
+        return new GlobalVariable(name, type) {{
+            init = initValue;
+        }};
     }
 
-    public Function getFunction(FunctionType type, boolean isBuiltin) {
-        return new Function(type, isBuiltin);
+    public Function buildFunction(String Fname, FunctionType type, boolean isBuiltin) {
+        return new Function(type, isBuiltin) {{
+            this.name = Fname;
+            node.insertAtEnd(m.functions);
+        }};
     }
 
     public BasicBlock getBB(String name) {return new BasicBlock(name);}
@@ -56,9 +66,10 @@ public class IRBuilder {
         return new BinaryInst(lhs.type, tag, lhs, rhs);
     }
 
-    public void buildBinary(Inst.TAG tag, Value lhs, Value rhs) {
-        var tmp = new BinaryInst(lhs.type, tag, lhs, rhs);
-        tmp.node.insertAtEnd(curBB.list);
+    public BinaryInst buildBinary(Inst.TAG tag, Value lhs, Value rhs) {
+        return new BinaryInst(lhs.type, tag, lhs, rhs) {{
+            this.node.insertAtEnd(curBB.list);
+        }};
     }
 
     public TerminatorInst.Br getBr(BasicBlock trueblock) {
@@ -70,57 +81,66 @@ public class IRBuilder {
     }
 
 
-    public void buildBr(BasicBlock tureblock) {
-        var tmp = new TerminatorInst.Br(tureblock);
-        tmp.node.insertAtEnd(curBB.list);
+    public TerminatorInst.Br buildBr(BasicBlock tureblock) {
+        return new TerminatorInst.Br(tureblock) {{
+            this.node.insertAtEnd(curBB.list);
+        }};
     }
 
-    public void buildBr(Value cond, BasicBlock trueblock, BasicBlock falseblock) {
-        var tmp = new TerminatorInst.Br(cond, trueblock, falseblock);
-        tmp.node.insertAtEnd(curBB.list);
+    public TerminatorInst.Br buildBr(Value cond, BasicBlock trueblock, BasicBlock falseblock) {
+        return new TerminatorInst.Br(cond, trueblock, falseblock) {{
+            this.node.insertAtEnd(curBB.list);
+        }};
     }
 
     public TerminatorInst.Ret getRet() {return new TerminatorInst.Ret();}
 
     public TerminatorInst.Ret getRet(Value val) {return new TerminatorInst.Ret(val);}
 
-    public void buildRet() {
-        var tmp = new TerminatorInst.Ret();
-        tmp.node.insertAtEnd(curBB.list);
+    public TerminatorInst.Ret buildRet() {
+        return new TerminatorInst.Ret() {{
+            node.insertAtEnd(curBB.list);
+        }};
     }
 
-    public void buildRet(Value val) {
-        var tmp = new TerminatorInst.Ret(val);
-        tmp.node.insertAtEnd(curBB.list);
+    public TerminatorInst.Ret buildRet(Value val) {
+        return new TerminatorInst.Ret(val) {{
+            node.insertAtEnd(curBB.list);
+        }};
     }
 
     public MemInst.Alloca getAlloca(Type type) {return new MemInst.Alloca(type);}
 
-    public void buildAlloca(Type type) {
-        var tmp = getAlloca(type);
-        //魔怔代码，Alloca必须插入 当前基本块 所在函数 的 入口基本块 的 开头
-        tmp.node.insertAtEntry(curBB.node.getParent().getVal().list.getEntry().getVal().list);
+    public MemInst.Alloca buildAlloca(Type type) {
+        return new MemInst.Alloca(type) {{
+            node.insertAtEntry(curBB.node.getParent().getVal().list.getEntry().getVal().list);
+        }};
     }
+
 
     public MemInst.Load getLoad(Type type, Value value) {return new MemInst.Load(type, value);}
 
-    public void buildLoad(Type type, Value value) {
-        var tmp = getLoad(type, value);
-        tmp.node.insertAtEnd(curBB.list);
+    public MemInst.Load buildLoad(Type type, Value value) {
+        return new MemInst.Load(type, value) {{
+            node.insertAtEnd(curBB.list);
+        }};
     }
 
     public MemInst.Store getStore(Value value, Value pointer) {return new MemInst.Store(value, pointer);}
 
-    public void buildStore(Value value, Value pointer) {
-        var tmp = getStore(value, pointer);
-        tmp.node.insertAtEnd(curBB.list);
+    public MemInst.Store buildStore(Value value, Value pointer) {
+        return new MemInst.Store(value, pointer) {{
+            node.insertAtEnd(curBB.list);
+        }};
     }
 
     public MemInst.Zext getZext(Value val) {return new MemInst.Zext(val, IntegerType.i32);}
 
-    public void buildZext(Value value) {
-        var tmp = getZext(value);
-        tmp.node.insertAtEnd(curBB.list);
+    public MemInst.Zext buildZext(Value value) {
+        return
+                new MemInst.Zext(value, IntegerType.i32) {{
+                    node.insertAtEnd(curBB.list);
+                }};
     }
 
 }

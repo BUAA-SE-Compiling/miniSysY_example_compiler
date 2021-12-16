@@ -1,5 +1,6 @@
 package ir.values;
 
+import ir.Module;
 import ir.Value;
 import ir.type.FunctionType;
 import ir.type.Type;

@@ -1,5 +1,6 @@
 package ir.values;
 
+import ir.Module;
 import ir.User;
 import ir.type.PointerType;
 import ir.type.Type;
@@ -33,9 +34,7 @@ public class GlobalVariable extends User {
                 sb.append(tmp.getContained().toString());
                 sb.append(" ");
                 sb.append("zeroinitializer ");
-            } else {
-                sb.append(init);
-            }
+            } else sb.append(init);
         }
         return sb.toString();
     }

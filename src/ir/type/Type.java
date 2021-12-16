@@ -3,9 +3,9 @@ package ir.type;
 import java.util.ArrayList;
 
 /*
-* Type 是所有类型的基类
-* LLVM IR 是强类型的语言，不允许隐式转换
-*/
+ * Type 是所有类型的基类
+ * LLVM IR 是强类型的语言，不允许隐式转换
+ */
 
 
 public class Type {
@@ -52,4 +52,9 @@ public class Type {
     public boolean isPointerTy() {return this instanceof PointerType;}
 
     public boolean isIntegerType() {return this instanceof IntegerType;}
+
+    public boolean isI1() {
+        if (this instanceof IntegerType o) return o.getNumBits() == 1;
+        return false;
+    }
 }
