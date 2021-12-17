@@ -143,5 +143,14 @@ public class IRBuilder {
                 }};
     }
 
+    public TerminatorInst.Call getCall(Function func, ArrayList<Value> args) {
+        return new TerminatorInst.Call(func, args);
+    }
+
+    public TerminatorInst.Call buildCall(Function func, ArrayList<Value> args) {
+        return new TerminatorInst.Call(func, args) {{
+            node.insertAtEnd(curBB.list);
+        }};
+    }
 }
 

@@ -37,6 +37,10 @@ public class Function extends Value {
         }
     }
 
+    public ArrayList<Param> getParamList() {
+        return paramList;
+    }
+
     //形参，记录各位置类型，不含值
     public class Param extends Value {
         private List<Value> bounds;

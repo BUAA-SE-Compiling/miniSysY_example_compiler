@@ -8,12 +8,17 @@ import ir.type.IntegerType;
 import ir.type.PointerType;
 import ir.type.Type;
 import ir.values.Constant;
+import ir.values.Function;
 import ir.values.instructions.Inst;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
+
+import ir.values.instructions.Inst.*;
+import frontend.miniSysYParser.*;
 
 public class Visitor extends miniSysYBaseVisitor<Void> {
     //  visit*函数返回的值都是Value,
@@ -243,14 +248,18 @@ public class Visitor extends miniSysYBaseVisitor<Void> {
                 if (ctx.primaryExp() != null) return visit(ctx.primaryExp());
                 if (ctx.callee() != null) throw new RuntimeException("Func call in constExp");
             }
-        } else {// TODO: 2021/12/14
+        } else {
             if (ctx.unaryExp() != null) {
                 visit(ctx.unaryExp());
                 if (tmp_.type.isI1()) builder.buildZext(tmp_);
-                if (ctx.unaryOp().NOT() != null) {
-                    tmp_ = builder.getBinary(Inst.TAG.Eq, CONST0, tmp_);
+                if (ctx.unaryOp().NOT() != null) tmp_ = builder.buildBinary(Inst.TAG.Eq, CONST0, tmp_);
+                if (ctx.unaryOp().PLUS() != null) {
+                    //do nothing;
                 }
-                ;
+                if (ctx.unaryOp().MINUS() != null) {
+                    if (tmp_.type.isI1()) tmp_ = builder.buildZext(tmp_);
+                    tmp_ = builder.buildBinary(Inst.TAG.Sub, CONST0, tmp_);
+                }
             }
             if (ctx.callee() != null) {
                 visit(ctx.callee());
@@ -263,56 +272,113 @@ public class Visitor extends miniSysYBaseVisitor<Void> {
     }
 
     /**
+     * 函数调用
      * callee : IDENT L_PAREN funcRParams? R_PAREN ;
      */
     @Override
     public Void visitCallee(miniSysYParser.CalleeContext ctx) {
-        return super.visitCallee(ctx);
+        //函数
+        var func = scope.find(ctx.IDENT().getText());
+        //实参
+        var args = new ArrayList<Value>();
+        List<ParamContext> argsCtx;
+        if (ctx.funcRParams() != null && func instanceof Function f) {
+            argsCtx = ctx.funcRParams().param();
+            var paramTys = ((FunctionType) func.type).getParamsTypes();
+            for (int i = 0; i < argsCtx.size(); i++) {
+                var argument = argsCtx.get(i);
+                var paramTy = paramTys.get(i);
+                buildCall = paramTy.isIntegerType();
+                visit(argument.exp());
+                buildCall = false;
+                args.add(tmp_);
+            }
+        }
+        tmp_ = builder.buildCall((Function) func, args);
+        return null;
     }
 
-    @Override
-    public Void visitUnaryOp(miniSysYParser.UnaryOpContext ctx) {
-        return super.visitUnaryOp(ctx);
-    }
-
-    @Override
-    public Void visitFuncRParams(miniSysYParser.FuncRParamsContext ctx) {
-        return super.visitFuncRParams(ctx);
-    }
-
-    @Override
-    public Void visitParam(miniSysYParser.ParamContext ctx) {
-        return super.visitParam(ctx);
-    }
 
     @Override
     public Void visitMulExp(miniSysYParser.MulExpContext ctx) {
-        return super.visitMulExp(ctx);
-    }
+        if (usingInt_) {
+            visit(ctx.unaryExp(0));
+            var s = tmpInt_;
+            for (var i = 1; i < ctx.unaryExp().size(); i++) {
+                visit(ctx.unaryExp(i));
+                if (ctx.mulOp(i - 1).MUL() != null) s *= tmpInt_;
+                if (ctx.mulOp(i - 1).DIV() != null) s /= tmpInt_;
+                if (ctx.mulOp(i - 1).MOD() != null) s %= tmpInt_;
+            }
+            tmpInt_ = s;
+        } else {
+            visit(ctx.unaryExp(0));
+            var lhs = tmp_;
+            for (int i = 1; i < ctx.unaryExp().size(); i++) {
+                visit(ctx.unaryExp(i));
+                var rhs = tmp_;
+                if (lhs.type.isI1()) lhs = builder.buildZext(lhs);
+                if (rhs.type.isI1()) rhs = builder.buildZext(rhs);
+                if (ctx.mulOp(i - 1).MUL() != null) lhs = builder.buildBinary(TAG.Mul, lhs, rhs);
+                if (ctx.mulOp(i - 1).DIV() != null) lhs = builder.buildBinary(TAG.Div, lhs, rhs);
+                if (ctx.mulOp(i - 1).MOD() != null) {
+                    //x%y=x - (x/y)*y
+                    var a = builder.buildBinary(TAG.Div, lhs, rhs);
+                    var b = builder.buildBinary(TAG.Mul, a, rhs);
+                    lhs = builder.buildBinary(TAG.Sub, lhs, b);
+                }
+            }
+            tmp_ = lhs;
+        }
+        return null;
 
-    @Override
-    public Void visitMulOp(miniSysYParser.MulOpContext ctx) {
-        return super.visitMulOp(ctx);
+
     }
 
     @Override
     public Void visitAddExp(miniSysYParser.AddExpContext ctx) {
-        return super.visitAddExp(ctx);
-    }
-
-    @Override
-    public Void visitAddOp(miniSysYParser.AddOpContext ctx) {
-        return super.visitAddOp(ctx);
+        if (usingInt_) {//所有值包括ident都必须是常量
+            visit(ctx.mulExp(0));
+            var s = tmpInt_;
+            for (var i = 1; i < ctx.mulExp().size(); i++) {
+                visit(ctx.mulExp(i));
+                if (ctx.addOp(i - 1).PLUS() != null) s += tmpInt_;
+                if (ctx.addOp(i - 1).MINUS() != null) s -= tmpInt_;
+            }
+            tmpInt_ = s;
+            return null;
+        } else {
+            visit(ctx.mulExp(0));
+            var lhs = tmp_;
+            for (int i = 1; i < ctx.mulExp().size(); i++) {
+                visit(ctx.mulExp(i));
+                var rhs = tmp_;
+                if (lhs.type.isI1()) lhs = builder.buildZext(lhs);
+                if (rhs.type.isI1()) rhs = builder.buildZext(rhs);
+                if (ctx.addOp(i - 1).PLUS() != null) lhs = builder.buildBinary(TAG.Add, lhs, rhs);
+                if (ctx.addOp(i - 1).MINUS() != null) lhs = builder.buildBinary(TAG.Sub, lhs, rhs);
+            }
+            tmp_ = lhs;
+        }
+        return null;
     }
 
     @Override
     public Void visitRelExp(miniSysYParser.RelExpContext ctx) {
-        return super.visitRelExp(ctx);
-    }
+        visit(ctx.addExp(0));
+        var lhs = tmp_;
+        for (int i = 0; i < ctx.addExp().size(); i++) {
+            expInRel = false;
+            visit(ctx.addExp(i));
+            var rhs = tmp_;
+            if (ctx.relOp(i - 1).LE() != null) lhs = builder.buildBinary(TAG.Le, lhs, rhs);
+            if (ctx.relOp(i - 1).GE() != null) lhs = builder.buildBinary(TAG.Ge, lhs, rhs);
+            if (ctx.relOp(i - 1).GT() != null) lhs = builder.buildBinary(TAG.Gt, lhs, rhs);
+            if (ctx.relOp(i - 1).LT() != null) lhs = builder.buildBinary(TAG.Lt, lhs, rhs);
+        }
+        tmp_ = lhs;
 
-    @Override
-    public Void visitRelOp(miniSysYParser.RelOpContext ctx) {
-        return super.visitRelOp(ctx);
+        return null;
     }
 
     @Override
