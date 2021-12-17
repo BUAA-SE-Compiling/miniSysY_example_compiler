@@ -437,6 +437,7 @@ public class Visitor extends miniSysYBaseVisitor<Void> {
         ctx.lAndExp(ctx.lAndExp().size() - 1).falseblock = ctx.falseblock;
         ctx.lAndExp(ctx.lAndExp().size() - 1).trueblock = ctx.trueblock;
         visit(ctx.lAndExp(ctx.lAndExp().size() - 1));
+        return null;
     }
 
     @Override
