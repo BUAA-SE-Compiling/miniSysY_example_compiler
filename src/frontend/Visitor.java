@@ -298,7 +298,9 @@ public class Visitor extends miniSysYBaseVisitor<Void> {
         return null;
     }
 
-
+    /**
+     * mulExp : unaryExp (mulOp unaryExp)* ;
+     */
     @Override
     public Void visitMulExp(miniSysYParser.MulExpContext ctx) {
         if (usingInt_) {
@@ -335,6 +337,11 @@ public class Visitor extends miniSysYBaseVisitor<Void> {
 
     }
 
+    /**
+     * @value :
+     * <p>
+     * addExp : mulExp (addOp mulExp)* ;
+     */
     @Override
     public Void visitAddExp(miniSysYParser.AddExpContext ctx) {
         if (usingInt_) {//所有值包括ident都必须是常量
@@ -363,6 +370,9 @@ public class Visitor extends miniSysYBaseVisitor<Void> {
         return null;
     }
 
+    /**
+     * relExp : addExp (relOp addExp)* ;
+     */
     @Override
     public Void visitRelExp(miniSysYParser.RelExpContext ctx) {
         visit(ctx.addExp(0));
@@ -377,28 +387,56 @@ public class Visitor extends miniSysYBaseVisitor<Void> {
             if (ctx.relOp(i - 1).LT() != null) lhs = builder.buildBinary(TAG.Lt, lhs, rhs);
         }
         tmp_ = lhs;
+        return null;
+    }
 
+    /**
+     * eqExp : relExp (eqOp relExp)* ;
+     */
+    @Override
+    public Void visitEqExp(miniSysYParser.EqExpContext ctx) {
+        visit(ctx.relExp(0));
+        var lhs = tmp_;
+        for (int i = 1; i < ctx.relExp().size(); i++) {
+            expInRel = false;
+            visit(ctx.relExp(i));
+            if (ctx.eqOp(i - 1).EQ() != null) lhs = builder.buildBinary(TAG.Eq, lhs, tmp_);
+            if (ctx.eqOp(i - 1).NEQ() != null) lhs = builder.buildBinary(TAG.Ne, lhs, tmp_);
+        }
+        tmp_ = lhs;
         return null;
     }
 
     @Override
-    public Void visitEqExp(miniSysYParser.EqExpContext ctx) {
-        return super.visitEqExp(ctx);
-    }
-
-    @Override
-    public Void visitEqOp(miniSysYParser.EqOpContext ctx) {
-        return super.visitEqOp(ctx);
-    }
-
-    @Override
     public Void visitLAndExp(miniSysYParser.LAndExpContext ctx) {
-        return super.visitLAndExp(ctx);
+        ctx.eqExp().forEach(exp -> {
+            var newBB = builder.buildBB("");
+            expInRel = true;
+            visit(exp);
+            if (expInRel) {
+                expInRel = false;
+                tmp_ = builder.buildBinary(TAG.Ne, tmp_, CONST0);
+            }
+            builder.buildBr(tmp_, newBB, ctx.falseblock);
+            builder.setInsertPoint(newBB);
+        });
+        builder.buildBr(ctx.trueblock);
+        return null;
     }
 
     @Override
     public Void visitLOrExp(miniSysYParser.LOrExpContext ctx) {
-        return super.visitLOrExp(ctx);
+        ctx.lAndExp(0).isFirstBlock = true;
+        for (int i = 0; i < ctx.lAndExp().size() - 1; i++) {
+            var newBB = builder.buildBB("");
+            ctx.lAndExp(i).trueblock = ctx.trueblock;//向下传递继承属性，记录要跳转的块从而实现短路求值
+            ctx.lAndExp(i).falseblock = newBB;
+            visit(ctx.lAndExp(i));
+            builder.setInsertPoint(newBB);
+        }
+        ctx.lAndExp(ctx.lAndExp().size() - 1).falseblock = ctx.falseblock;
+        ctx.lAndExp(ctx.lAndExp().size() - 1).trueblock = ctx.trueblock;
+        visit(ctx.lAndExp(ctx.lAndExp().size() - 1));
     }
 
     @Override

@@ -62,6 +62,12 @@ public class IRBuilder {
 
     public BasicBlock getBB(String name) {return new BasicBlock(name);}
 
+    public BasicBlock buildBB(String name) {
+        return new BasicBlock(name) {{
+            node.insertAtEnd(curFunc.list);
+        }};
+    }
+
     public BinaryInst getBinary(Inst.TAG tag, Value lhs, Value rhs) {
         return new BinaryInst(lhs.type, tag, lhs, rhs);
     }

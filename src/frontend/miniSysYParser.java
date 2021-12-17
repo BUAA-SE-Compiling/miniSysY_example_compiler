@@ -1,5 +1,6 @@
 // Generated from miniSysY.g4 by ANTLR 4.9.2
 package frontend;
+import ir.values.BasicBlock;
 import org.antlr.v4.runtime.atn.*;
 import org.antlr.v4.runtime.dfa.DFA;
 import org.antlr.v4.runtime.*;
@@ -2658,6 +2659,10 @@ public class miniSysYParser extends Parser {
 	}
 
 	public static class LAndExpContext extends ParserRuleContext {
+		public BasicBlock trueblock;//做短路求值的时候用来向下传递传继承属性
+		public boolean isFirstBlock = false;
+		public BasicBlock falseblock;
+
 		public List<EqExpContext> eqExp() {
 			return getRuleContexts(EqExpContext.class);
 		}
@@ -2718,6 +2723,9 @@ public class miniSysYParser extends Parser {
 	}
 
 	public static class LOrExpContext extends ParserRuleContext {
+
+		public BasicBlock falseblock;
+		public BasicBlock trueblock;
 		public List<LAndExpContext> lAndExp() {
 			return getRuleContexts(LAndExpContext.class);
 		}
