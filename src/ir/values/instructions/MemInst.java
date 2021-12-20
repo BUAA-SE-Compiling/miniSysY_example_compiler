@@ -122,7 +122,26 @@ public class MemInst {
         // TODO: 2021/10/31
         @Override
         public String toString() {
-            return "";
+            StringBuilder b = new StringBuilder();
+            b
+                    .append(this.name)
+                    .append("= getelementptr ")
+                    .append(((PointerType) getOP(0).type).getContained())
+                    .append(",")
+                    .append(getOP(0).type)
+                    .append(" ")
+                    .append(getOP(0).name)
+                    .append(" ");
+            for (int i = 0; i < getNumOP(); i++) {
+                b
+                        .append(", ")
+                        .append(getOP(i).type)
+                        .append(" ")
+                        .append(getOP(i).name);
+            }
+            return b.toString();
+
+
         }
     }
 

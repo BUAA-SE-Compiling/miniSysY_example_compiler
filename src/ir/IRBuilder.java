@@ -149,7 +149,18 @@ public class IRBuilder {
                 }};
     }
 
+    public MemInst.GetElementPtr getGEP(Value ptr, ArrayList<Value> idxs) {
+        return new MemInst.GetElementPtr(ptr, idxs);
+    }
+
+    public MemInst.GetElementPtr buildGEP(Value ptr, ArrayList<Value> idxs) {
+        return new MemInst.GetElementPtr(ptr, idxs) {{
+            node.insertAtEnd(curBB.list);
+        }};
+    }
+
     public TerminatorInst.Call getCall(Function func, ArrayList<Value> args) {
+
         return new TerminatorInst.Call(func, args);
     }
 

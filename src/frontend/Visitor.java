@@ -7,18 +7,19 @@ import ir.type.FunctionType;
 import ir.type.IntegerType;
 import ir.type.PointerType;
 import ir.type.Type;
+import ir.values.BasicBlock;
 import ir.values.Constant;
 import ir.values.Function;
 import ir.values.instructions.Inst;
 
+import java.awt.*;
 import java.math.BigInteger;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
+import java.util.*;
 import java.util.List;
 
 import ir.values.instructions.Inst.*;
 import frontend.miniSysYParser.*;
+import ir.values.instructions.TerminatorInst;
 
 public class Visitor extends miniSysYBaseVisitor<Void> {
     //  visit*函数返回的值都是Value,
@@ -33,8 +34,14 @@ public class Visitor extends miniSysYBaseVisitor<Void> {
     //status word
     private boolean usingInt_ = false;//常量初始化要对表达式求值，并且用的Ident也要是常量
     private boolean globalInit_ = false;//初始化全局变量
-    private boolean buildCall = false;
-    private boolean expInRel = false;
+    private boolean buildCall = false;    //用于检查是否在生成 call 指令
+    private boolean expInRel = false;    //用于短路求值
+    //用于回填
+    private final BasicBlock breakMark = new BasicBlock("");
+    private final BasicBlock continueMark = new BasicBlock("");
+    //回填的用到的数据结构，每解析一层WhileStmt都会push一个ArrayList到Stack中
+    //用于处理嵌套循环的break与continue
+    Stack<ArrayList<TerminatorInst.Br>> backPatchRecord;
     /**
      * 我使用全局变量来在函数间进行参数的传递，这么做是为了方便理解代码
      * 你也可以把上面 `extends miniSysYBaseVisitor<Void>` 部分的 `Void`改成`Value`
@@ -169,46 +176,162 @@ public class Visitor extends miniSysYBaseVisitor<Void> {
         return super.visitConditionStmt(ctx);
     }
 
+
     @Override
     public Void visitWhileStmt(miniSysYParser.WhileStmtContext ctx) {
-        return super.visitWhileStmt(ctx);
+        var parentBB = builder.curBB();
+        var name = "";
+        //如果最后的时候输出正常，这些名字是不会出现在导出的文件里的，如果输出不正常，这些名字可以辅助debug
+        var whileCondEntryBlock = builder.buildBB("whileCondition");
+        var trueBlock = builder.buildBB("_body");
+        var nxtBlock = builder.buildBB("_nxtBlock");
+        builder.setInsertPoint(parentBB);
+        builder.buildBr(whileCondEntryBlock);//在parentBB末尾插入一个跳转到whileCond的Br
+        ctx.cond().falseblock = nxtBlock;
+        ctx.cond().trueblock = trueBlock;
+        visit(ctx.cond());
+        builder.setInsertPoint(trueBlock);
+        visit(ctx.stmt());
+        builder.buildBr(whileCondEntryBlock);
+        return null;
+    }
+
+    private void backpatch() {
+        // TODO: 2021/12/20  
     }
 
     @Override
     public Void visitBreakStmt(miniSysYParser.BreakStmtContext ctx) {
-        return super.visitBreakStmt(ctx);
+        builder.buildBr(continueMark);
+        return null;
     }
 
     @Override
     public Void visitContinueStmt(miniSysYParser.ContinueStmtContext ctx) {
-        return super.visitContinueStmt(ctx);
+        builder.buildBr(breakMark);
+        return null;
     }
 
+    /**
+     * returnStmt : RETURN_KW (exp)? SEMICOLON ;
+     */
     @Override
     public Void visitReturnStmt(miniSysYParser.ReturnStmtContext ctx) {
-        return super.visitReturnStmt(ctx);
+        if (ctx.exp() != null) {
+            //有返回值
+            visit(ctx.exp());
+            builder.buildRet(tmp_);
+        } else {
+            //没有返回值
+            builder.buildRet();
+        }
+        return null;
     }
 
-    @Override
-    public Void visitExp(miniSysYParser.ExpContext ctx) {
-        return super.visitExp(ctx);
-    }
-
-    @Override
-    public Void visitCond(miniSysYParser.CondContext ctx) {
-        return super.visitCond(ctx);
-    }
-
+    /**
+     * lVal : IDENT (L_BRACKT exp R_BRACKT)* ;
+     */
     @Override
     public Void visitLVal(miniSysYParser.LValContext ctx) {
-        return super.visitLVal(ctx);
+        var name = ctx.IDENT().getText();
+        var val = scope.find(name);
+        if (val == null) throw new RuntimeException("undefined value name :" + name);
+        if (val.type.isIntegerType()) {//是在编译时就知道值的 int 类型，
+            tmp_ = val;
+            return null;
+        }
+        boolean INT = false, PTR = false, ARR = false;
+        if (val.type.isPointerTy()) {
+            //alloca i32
+            INT = ((PointerType) val.type).getContained().isIntegerType();
+            //函数传参传入的数组
+            PTR = ((PointerType) val.type).getContained().isPointerTy();
+            //指向别的数组
+            ARR = ((PointerType) val.type).getContained().isArrayTy();
+        }
+        if (INT) {
+            if (ctx.exp().isEmpty()) {
+                tmp_ = val;
+                return null;
+            } else {
+                for (ExpContext expContext : ctx.exp()) {
+                    visit(expContext);
+                    var fromExp = tmp_;
+                    val = builder.getGEP(val, new ArrayList<>() {{
+                        add(fromExp);
+                    }});
+                }
+                tmp_ = val;
+                return null;
+            }
+        }
+        if (PTR) {
+            if (ctx.exp().isEmpty()) {
+                //作为参数传递给 Call
+                tmp_ = builder.buildLoad(((PointerType) val.type).getContained(), val);
+            } else {
+                PointerType allocatedTy = (PointerType) val.type;
+                var containedTy = (PointerType) allocatedTy.getContained();
+                var load = builder.buildLoad(containedTy, val);
+                visit(ctx.exp(0));
+                var gep = builder.buildGEP(load, new ArrayList<>() {{
+                    add(tmp_);
+                }});
+                for (int i = 1; i < ctx.exp().size(); i++) {
+                    visit(ctx.exp(i));
+                    gep = builder.buildGEP(gep, new ArrayList<>() {{
+                        add(CONST0);
+                        add(tmp_);
+                    }});
+                }
+            }
+        }
+        if (ARR) {
+            if (ctx.exp().isEmpty()) {
+                tmp_ = builder.buildGEP(val, new ArrayList<>() {{
+                    add(CONST0);
+                    add(CONST0);
+                }});
+            } else {
+                for (ExpContext expContext : ctx.exp()) {
+                    visit(expContext);
+                    val = builder.buildGEP(val, new ArrayList<>() {{
+                        add(CONST0);
+                        add(tmp_);
+                    }});
+                }
+                tmp_ = val;
+            }
+        }
+        return null;
     }
 
     @Override
     public Void visitPrimaryExp(miniSysYParser.PrimaryExpContext ctx) {
-
-        return super.visitPrimaryExp(ctx);
-
+        if (usingInt_) {
+            if (ctx.exp() != null) visit(ctx.exp());
+            if (ctx.lVal() != null) {
+                visit(ctx.lVal());
+                tmpInt_ = ((Constant.ConstantInt) tmp_).getVal();
+            }
+            if (ctx.number() != null) visit(ctx.number());
+        } else {
+            if (ctx.exp() != null) visit(ctx.exp());
+            if (ctx.lVal() != null) {
+                if (buildCall) {//正在生成 call 指令
+                    buildCall = false;
+                    visit(ctx.lVal());
+                    return null;
+                } else {
+                    visit(ctx.lVal());
+                    if (tmp_.type.isIntegerType()) return null;//如果是Integer类型的就不用load
+                    //要Load的类型是 Integer*
+                    tmp_ = builder.buildLoad(((PointerType) tmp_.type).getContained(), tmp_);
+                }
+            }
+            if (ctx.number() != null) visit(ctx.number());
+        }
+        return null;
     }
 
     @Override
@@ -441,7 +564,27 @@ public class Visitor extends miniSysYBaseVisitor<Void> {
     }
 
     @Override
-    public Void visitConstExp(miniSysYParser.ConstExpContext ctx) {
-        return super.visitConstExp(ctx);
+    public Void visitCond(miniSysYParser.CondContext ctx) {
+        ctx.lOrExp().falseblock = ctx.falseblock;
+        ctx.lOrExp().trueblock = ctx.trueblock;
+        visit(ctx.lOrExp());
+        return null;
     }
+
+    /**
+     * constExp : addExp ;
+     * <p>
+     * tmpint_ -> res of exp
+     * <p>
+     * 表达式求和
+     */
+    @Override
+    public Void visitConstExp(miniSysYParser.ConstExpContext ctx) {
+        usingInt_ = true;
+        visit(ctx.addExp());
+        tmp_ = builder.getConstantInt(tmpInt_);
+        usingInt_ = false;
+        return null;
+    }
+
 }
