@@ -3,14 +3,12 @@ package frontend;
 import ir.IRBuilder;
 import ir.Module;
 import ir.Value;
-import ir.type.FunctionType;
-import ir.type.IntegerType;
-import ir.type.PointerType;
-import ir.type.Type;
+import ir.type.*;
 import ir.values.BasicBlock;
 import ir.values.Constant;
 import ir.values.Function;
 import ir.values.instructions.Inst;
+import ir.values.instructions.TerminatorInst.*;
 
 import java.awt.*;
 import java.math.BigInteger;
@@ -20,6 +18,8 @@ import java.util.List;
 import ir.values.instructions.Inst.*;
 import frontend.miniSysYParser.*;
 import ir.values.instructions.TerminatorInst;
+
+import javax.xml.namespace.QName;
 
 public class Visitor extends miniSysYBaseVisitor<Void> {
     //  visit*函数返回的值都是Value,
@@ -41,7 +41,7 @@ public class Visitor extends miniSysYBaseVisitor<Void> {
     private final BasicBlock continueMark = new BasicBlock("");
     //回填的用到的数据结构，每解析一层WhileStmt都会push一个ArrayList到Stack中
     //用于处理嵌套循环的break与continue
-    Stack<ArrayList<TerminatorInst.Br>> backPatchRecord;
+    Stack<ArrayList<Br>> backPatchRecord;
     /**
      * 我使用全局变量来在函数间进行参数的传递，这么做是为了方便理解代码
      * 你也可以把上面 `extends miniSysYBaseVisitor<Void>` 部分的 `Void`改成`Value`
@@ -143,48 +143,76 @@ public class Visitor extends miniSysYBaseVisitor<Void> {
 
     @Override
     public Void visitFuncFParam(miniSysYParser.FuncFParamContext ctx) {
-        return super.visitFuncFParam(ctx);
+        if (!ctx.L_BRACKT().isEmpty()) {
+            var type = i32Type_;
+            for (int i = 0; i < ctx.exp().size(); i++) {
+                usingInt_ = true;
+                visit(ctx.exp(ctx.exp().size() - (i + 1)));
+                usingInt_ = false;
+                type = new ArrayType(type, tmpInt_);
+            }
+        } else {
+            tmpTy_ = i32Type_;
+        }
+        return null;
     }
 
     @Override
     public Void visitBlock(miniSysYParser.BlockContext ctx) {
-        return super.visitBlock(ctx);
-    }
-
-    @Override
-    public Void visitBlockItem(miniSysYParser.BlockItemContext ctx) {
-        return super.visitBlockItem(ctx);
-    }
-
-    @Override
-    public Void visitStmt(miniSysYParser.StmtContext ctx) {
-        return super.visitStmt(ctx);
+        scope.addLayer();
+        ctx.blockItem().forEach(this::visit);
+        scope.popLayer();
+        return null;
     }
 
     @Override
     public Void visitAssignStmt(miniSysYParser.AssignStmtContext ctx) {
-        return super.visitAssignStmt(ctx);
+        visit(ctx.lVal());
+        var rhs = tmp_;
+        visit(ctx.exp());
+        var lhs = tmp_;
+        builder.buildStore(lhs, rhs);
+        return null;
     }
 
-    @Override
-    public Void visitExpStmt(miniSysYParser.ExpStmtContext ctx) {
-        return super.visitExpStmt(ctx);
-    }
-
+    /**
+     * conditionStmt : IF_KW L_PAREN cond R_PAREN stmt (ELSE_KW stmt)? ;
+     */
     @Override
     public Void visitConditionStmt(miniSysYParser.ConditionStmtContext ctx) {
-        return super.visitConditionStmt(ctx);
+        var parentBB = builder.curBB();
+        var trueBlock = builder.buildBB("_then");
+        var nxtblock = builder.buildBB("_nxtBLock");
+        var falseBlock = ctx.ELSE_KW() == null ? nxtblock : builder.buildBB("_else");
+        var ifEndWithRet = false;
+        ctx.cond().falseblock = falseBlock;
+        ctx.cond().trueblock = trueBlock;
+        visit(ctx.cond());
+        builder.setInsertPoint(trueBlock);
+        visit(ctx.stmt(0));
+        builder.buildBr(nxtblock);
+        //解析完stmt后的最后一个块的末尾语句是ret(),
+        //在 有 if 有 else 且 if 条件块和 else 条件块的最后一条语句都是 ret 的时候，就将nxtblock删去，不然会产生一个空的块
+        if (builder.curBB().list.getLast().getVal() instanceof Ret) ifEndWithRet = true;
+        if (ctx.ELSE_KW() != null) {
+            builder.setInsertPoint(falseBlock);
+            visit(ctx.stmt(1));
+            builder.buildBr(nxtblock);
+            if (ifEndWithRet && builder.curBB().list.getLast().getVal() instanceof Ret) nxtblock.node.removeSelf();
+        }
+        builder.setInsertPoint(nxtblock);
+        return null;
     }
 
 
     @Override
     public Void visitWhileStmt(miniSysYParser.WhileStmtContext ctx) {
         var parentBB = builder.curBB();
-        var name = "";
         //如果最后的时候输出正常，这些名字是不会出现在导出的文件里的，如果输出不正常，这些名字可以辅助debug
-        var whileCondEntryBlock = builder.buildBB("whileCondition");
+        var whileCondEntryBlock = builder.buildBB("_whileCondition");
         var trueBlock = builder.buildBB("_body");
         var nxtBlock = builder.buildBB("_nxtBlock");
+        backPatchRecord.push(new ArrayList<>());//每解析一个whileStmt都push一层进去，记录这个while的break和continue
         builder.setInsertPoint(parentBB);
         builder.buildBr(whileCondEntryBlock);//在parentBB末尾插入一个跳转到whileCond的Br
         ctx.cond().falseblock = nxtBlock;
@@ -193,22 +221,26 @@ public class Visitor extends miniSysYBaseVisitor<Void> {
         builder.setInsertPoint(trueBlock);
         visit(ctx.stmt());
         builder.buildBr(whileCondEntryBlock);
+        for (Br br : backPatchRecord.pop()) {
+            if (br.getOP(0) == breakMark) {
+                br.setOperand(nxtBlock, 0);
+            } else if (br.getOP(0) == continueMark) {
+                br.setOperand(whileCondEntryBlock, 0);
+            }
+        }
+        builder.setInsertPoint(nxtBlock);
         return null;
-    }
-
-    private void backpatch() {
-        // TODO: 2021/12/20  
     }
 
     @Override
     public Void visitBreakStmt(miniSysYParser.BreakStmtContext ctx) {
-        builder.buildBr(continueMark);
+        backPatchRecord.peek().add(builder.buildBr(continueMark));
         return null;
     }
 
     @Override
     public Void visitContinueStmt(miniSysYParser.ContinueStmtContext ctx) {
-        builder.buildBr(breakMark);
+        backPatchRecord.peek().add(builder.buildBr(breakMark));
         return null;
     }
 
