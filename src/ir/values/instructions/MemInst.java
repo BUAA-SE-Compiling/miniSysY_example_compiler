@@ -59,10 +59,21 @@ public class MemInst {
             this.needName = false;
         }
 
-        // TODO: 2021/10/31
+
         @Override
         public String toString() {
-            return super.toString();
+            StringBuilder sb = new StringBuilder();
+            var lhs = getOP(0);
+            var rhs = getOP(1);
+            sb.append("store ").
+                    append(lhs.type.toString()).
+                    append(" ").
+                    append(lhs.name).
+                    append(", ").
+                    append(rhs.type.toString()).
+                    append(" ").
+                    append(rhs.name);
+            return sb.toString();
         }
 
         public Value getVal() {return this.getOP(0);}
@@ -119,7 +130,6 @@ public class MemInst {
             elementType_ = getElementType(pointer, idx);
         }
 
-        // TODO: 2021/10/31
         @Override
         public String toString() {
             StringBuilder b = new StringBuilder();
@@ -140,8 +150,6 @@ public class MemInst {
                         .append(getOP(i).name);
             }
             return b.toString();
-
-
         }
     }
 

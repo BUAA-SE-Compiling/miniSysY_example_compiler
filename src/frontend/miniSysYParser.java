@@ -779,6 +779,7 @@ public class miniSysYParser extends Parser {
     }
 
     public static class InitValContext extends ParserRuleContext {
+        public ArrayList<Integer> dimInfo_;
         public ExpContext exp() {
             return getRuleContext(ExpContext.class, 0);
         }
@@ -1005,6 +1006,7 @@ public class miniSysYParser extends Parser {
     }
 
     public static class FuncFParamsContext extends ParserRuleContext {
+        public boolean initBB = false;
         public List<FuncFParamContext> funcFParam() {
             return getRuleContexts(FuncFParamContext.class);
         }

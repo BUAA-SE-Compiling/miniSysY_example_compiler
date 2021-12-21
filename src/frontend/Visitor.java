@@ -51,6 +51,7 @@ public class Visitor extends miniSysYBaseVisitor<Void> {
     private int tmpInt_;
     private Type tmpTy_;
     private ArrayList<Type> tmpTyArr;
+    private ArrayList<Value> tmpArr_;
 
     /**
      * program : compUnit ;
@@ -76,73 +77,161 @@ public class Visitor extends miniSysYBaseVisitor<Void> {
         scope.put("getch", builder.buildFunction("getch", new FunctionType(i32Type, params_empty), true));
         scope.put("putint", builder.buildFunction("putint", new FunctionType(voidType, params_int), true));
         scope.put("putch", builder.buildFunction("putch", new FunctionType(voidType, params_int), true));
-        scope.put("putarray",
-                builder.buildFunction("putarray", new FunctionType(voidType, params_int_and_array), true));
+        scope.put("putarray", builder.buildFunction("putarray", new FunctionType(voidType, params_int_and_array), true));
         return super.visitProgram(ctx);
     }
 
-    @Override
-    public Void visitCompUnit(miniSysYParser.CompUnitContext ctx) {
-        return super.visitCompUnit(ctx);
-    }
-
-    @Override
-    public Void visitDecl(miniSysYParser.DeclContext ctx) {
-        return super.visitDecl(ctx);
-    }
-
-    @Override
-    public Void visitConstDecl(miniSysYParser.ConstDeclContext ctx) {
-        return super.visitConstDecl(ctx);
-    }
-
-    @Override
-    public Void visitBType(miniSysYParser.BTypeContext ctx) {
-        return super.visitBType(ctx);
-    }
-
+    // TODO: 2021/12/21
     @Override
     public Void visitConstDef(miniSysYParser.ConstDefContext ctx) {
         return super.visitConstDef(ctx);
     }
 
+    // TODO: 2021/12/21
     @Override
     public Void visitConstInitVal(miniSysYParser.ConstInitValContext ctx) {
         return super.visitConstInitVal(ctx);
     }
 
-    @Override
-    public Void visitVarDecl(miniSysYParser.VarDeclContext ctx) {
-        return super.visitVarDecl(ctx);
-    }
 
     @Override
     public Void visitVarDef(miniSysYParser.VarDefContext ctx) {
-        return super.visitVarDef(ctx);
+// TODO: 2021/12/21
+
+        return null;
     }
 
     @Override
     public Void visitInitVal(miniSysYParser.InitValContext ctx) {
-        return super.visitInitVal(ctx);
+        if (ctx.exp() != null && ctx.dimInfo_ == null) {
+            if (globalInit_) {
+                usingInt_ = true;
+                visit(ctx.exp());
+                usingInt_ = false;
+                tmp_ = Constant.ConstantInt.get(tmpInt_);
+            } else visit(ctx.exp());
+        } else {
+            var curDimLength = ctx.dimInfo_.get(0);
+            var sizeOfEachELe = 1;
+            var arrOfCurDim = new ArrayList<Value>();
+            for (int i = 1; i < ctx.dimInfo_.size(); i++) {
+                sizeOfEachELe *= ctx.dimInfo_.get(i);
+            }
+            for (InitValContext context : ctx.initVal()) {
+                if (context.exp() == null) {
+                    var pos = arrOfCurDim.size();
+                    for (int i = 0; i < (sizeOfEachELe - (pos % sizeOfEachELe)) % sizeOfEachELe; i++) {
+                        arrOfCurDim.add(CONST0);
+                    }
+                    context.dimInfo_ = new ArrayList<>(ctx.dimInfo_.subList(1, ctx.dimInfo_.size()));
+                    visit(context);
+                    arrOfCurDim.addAll(tmpArr_);
+                } else {
+                    if (globalInit_) {
+                        usingInt_ = true;
+                        visit(context.exp());
+                        usingInt_ = false;
+                        tmp_ = Constant.ConstantInt.get(tmpInt_);
+                    } else {
+                        visit(context.exp());
+                    }
+                    arrOfCurDim.add(tmp_);
+                }
+            }
+            for (int i = arrOfCurDim.size(); i < curDimLength * sizeOfEachELe; i++) {
+                arrOfCurDim.add(CONST0);
+            }
+            tmpArr_ = arrOfCurDim;
+        }
+        return null;
     }
 
+    /**
+     * funcDef : funcType IDENT L_PAREN funcFParams? R_PAREN block ;
+     * <p>
+     * 初始化函数类型；初始化函数参数，并对参数插入 alloca 和 store；初始化基本块
+     */
     @Override
     public Void visitFuncDef(miniSysYParser.FuncDefContext ctx) {
-        return super.visitFuncDef(ctx);
+        var funcName = ctx.IDENT().getText();
+        var retType = voidType_;
+        var typeStr = ctx.getChild(0).getText();
+        if (typeStr.equals("int")) retType = i32Type_;//返回值类型
+        ArrayList<Type> paramTyList = new ArrayList<>();
+        if (ctx.funcFParams() != null) {
+            visit(ctx.funcFParams());
+            paramTyList.addAll(tmpTyArr);
+        }
+        FunctionType functionType = new FunctionType(retType, paramTyList);
+        var func = builder.buildFunction(funcName, functionType, false);
+        builder.setFunc(func);
+        scope.put(funcName, func);
+        var bb = builder.buildBB(func.name + "_ENTRY");
+        scope.addLayer();
+        scope.preEnter = true;
+        builder.setInsertPoint(bb);
+        if (ctx.funcFParams() != null) {
+            ctx.funcFParams().initBB = true;
+            visit(ctx.funcFParams());
+        }
+        visit(ctx.block());
+        var last = builder.curBB().list.getLast().getVal();
+        if (last.tag != TAG.Br && last.tag != TAG.Ret) {
+            if (func.type instanceof FunctionType o) {
+                if (o.getRetTType().isVoidTy()) builder.buildRet();
+                if (o.getRetTType().isIntegerType()) builder.buildRet(CONST0);
+            }
+        }
+        return null;
     }
 
-    @Override
-    public Void visitFuncType(miniSysYParser.FuncTypeContext ctx) {
-        return super.visitFuncType(ctx);
-    }
-
+    //这个context 会被 visit 两遍，一遍用来生成在编译时所需要的信息，一遍用来生成 IR
     @Override
     public Void visitFuncFParams(miniSysYParser.FuncFParamsContext ctx) {
-        return super.visitFuncFParams(ctx);
+        if (ctx.initBB) {
+            ctx.initBB = false;
+            var paramList = builder.curFunc().getParamList();
+            if (paramList.size() != 0) {
+                for (int i = 0; i < ctx.funcFParam().size(); i++) {
+                    var context = ctx.funcFParam(i);
+                    if (!context.L_BRACKT().isEmpty()) {//这是个数组参数
+                        var dimList = new ArrayList<Value>();
+                        var type = i32Type_;
+                        dimList.add(CONST0);
+                        for (int j = 0; j < context.exp().size(); j++) {
+                            usingInt_ = true;
+                            visit(context.exp(context.exp().size() - (j + 1)));
+                            usingInt_ = false;
+                            dimList.add(tmp_);
+                            type = new ArrayType(type, tmpInt_);
+                        }
+                        //alloca 一个 和 param 相同的 type 的值，然后把 param store 到这个 alloca 里
+                        var arrAlloca = builder.buildAlloca(new PointerType(type));
+                        builder.buildStore(paramList.get(i), arrAlloca);
+                        scope.put(context.IDENT().getText(), arrAlloca);
+                        paramList.get(i).setBounds(dimList);
+                    } else {//int参数
+                        var alloca = builder.buildAlloca(i32Type_);
+                        builder.buildStore(paramList.get(i), alloca);
+                        scope.put(ctx.funcFParam().get(i).IDENT().getText(), alloca);
+                    }
+                }
+            }
+        } else {
+            //这个信息是保存给scope来提供给生成 call 指令使用的
+            ArrayList<Type> types = new ArrayList<>();
+            ctx.funcFParam().forEach(param -> {
+                visit(param);
+                types.add(tmpTy_);
+            });
+            tmpTyArr = types;
+        }
+        return null;
     }
 
     @Override
     public Void visitFuncFParam(miniSysYParser.FuncFParamContext ctx) {
+        //这个 param 是数组
         if (!ctx.L_BRACKT().isEmpty()) {
             var type = i32Type_;
             for (int i = 0; i < ctx.exp().size(); i++) {
@@ -151,7 +240,7 @@ public class Visitor extends miniSysYBaseVisitor<Void> {
                 usingInt_ = false;
                 type = new ArrayType(type, tmpInt_);
             }
-        } else {
+        } else {//这个param是int值
             tmpTy_ = i32Type_;
         }
         return null;
