@@ -7,25 +7,25 @@ import ir.type.*;
 import ir.values.BasicBlock;
 import ir.values.Constant;
 import ir.values.Function;
+import ir.values.GlobalVariable;
 import ir.values.instructions.Inst;
 import ir.values.instructions.TerminatorInst.*;
 
-import java.awt.*;
 import java.math.BigInteger;
 import java.util.*;
 import java.util.List;
 
 import ir.values.instructions.Inst.*;
 import frontend.miniSysYParser.*;
-import ir.values.instructions.TerminatorInst;
 
-import javax.xml.namespace.QName;
+import javax.script.ScriptEngineManager;
+import javax.swing.*;
 
 public class Visitor extends miniSysYBaseVisitor<Void> {
     //  visit*函数返回的值都是Value,
     // 所以一些值能够直接通过visit函数的返回值进行传递，但有一些额外的值没办法这么搞，我就通过全局变量传了。
     Module m = Module.module; //module 是单例的
-    private final IRBuilder builder = IRBuilder.getInstance();//builder也是单例的
+    private final IRBuilder builder = IRBuilder.getInstance();//builder也是单例
     private final Scope scope = new Scope();//和作用域相匹配的符号表
     // singleton variables
     private final Constant.ConstantInt CONST0 = Constant.ConstantInt.get(0);
@@ -81,23 +81,239 @@ public class Visitor extends miniSysYBaseVisitor<Void> {
         return super.visitProgram(ctx);
     }
 
-    // TODO: 2021/12/21
-    @Override
-    public Void visitConstDef(miniSysYParser.ConstDefContext ctx) {
-        return super.visitConstDef(ctx);
+    public Constant genConstArr(ArrayList<Integer> dims, ArrayList<Value> inits) {
+        var curDimLength = dims.get(0);
+        var curDimArr = new ArrayList<Constant>();
+        var length = inits.size() / curDimLength;
+        var arrTy = i32Type_;
+        if (length == 1) {
+            for (int i = 0; i < curDimLength; i++) {
+                curDimArr.add((Constant) inits.get(i));
+            }
+        } else {
+            for (int i = 0; i < curDimLength; i++) {
+                //fix subDims and add to curDimArr
+                curDimArr.add(
+                        genConstArr(
+                                new ArrayList<>(dims.subList(1, dims.size())),
+                                new ArrayList<>(inits.subList(length * i, length * (i + 1)))));
+
+            }
+        }
+
+        for (int i = dims.size(); i > 0; i--) {
+            arrTy = new ArrayType(arrTy, dims.get(i - 1));
+        }
+        return builder.getConstantArray(arrTy, curDimArr);
     }
 
     // TODO: 2021/12/21
     @Override
+    public Void visitConstDef(miniSysYParser.ConstDefContext ctx) {
+        var name = ctx.IDENT().getText();
+        if (scope.top().get(name) != null) throw new RuntimeException("name already exists");
+        if (ctx.constExp().isEmpty()) {//not array
+            if (ctx.constInitVal() != null) {
+                visit(ctx.constInitVal());
+                scope.put(ctx.IDENT().getText(), tmp_);
+            }
+        } else {
+            var arrTy = i32Type_;
+            var dims = new ArrayList<Integer>();
+            ctx.constExp().forEach(context -> {
+                visit(context);
+                dims.add(((Constant.ConstantInt) tmp_).getVal());
+            });
+            for (var i = dims.size(); i > 0; i--) arrTy = new ArrayType(arrTy, dims.get(i - 1));
+            if (scope.isGlobal()) {
+                if (ctx.constInitVal() != null) {
+                    ctx.constInitVal().dimInfo_ = dims;
+                    globalInit_ = true;
+                    visit(ctx.constInitVal());
+                    globalInit_ = false;
+                    var arr = tmpArr_;
+                    ArrayList<Constant> g = new ArrayList<>();
+                    arr.forEach(i -> g.add((Constant.ConstantInt) i));
+                    var init = new Constant.ConstantArray(arrTy, g);
+                    var variable = builder.getGlobalVariable(ctx.IDENT().getText(), arrTy, init);
+                    variable.setConst();
+                    scope.put(ctx.IDENT().getText(), variable);
+                } else {
+                    var variable = builder.getGlobalVariable(ctx.IDENT().getText(), arrTy, null);
+                    scope.put(ctx.IDENT().getText(), variable);
+                }
+            } else {
+                var allocatedArray = builder.buildAlloca(arrTy);
+                scope.put(ctx.IDENT().getText(), allocatedArray);
+                if (ctx.constInitVal() != null) {
+                    allocatedArray.setInit();
+                    ctx.constInitVal().dimInfo_ = dims;
+                    visit(ctx.constInitVal());
+                    var arr = tmpArr_;
+                    var ptr = builder.buildGEP(allocatedArray, new ArrayList<>() {{
+                        add(CONST0);
+                        add(CONST0);
+                    }});
+                    for (int i = 1; i < ctx.constInitVal().dimInfo_.size(); i++) {
+                        ptr = builder.buildGEP(ptr, new ArrayList<>() {{
+                            add(CONST0);
+                            add(CONST0);
+                        }});
+                    }
+                    for (int i = 0; i < arr.size(); i++) {
+                        if (i == 0) {
+                            builder.buildStore(arr.get(0), ptr);
+                        } else {
+                            int finalI = i;
+                            var p = builder.buildGEP(ptr, new ArrayList<>() {{
+                                add(Constant.ConstantInt.get(finalI));
+                            }});
+                            builder.buildStore(arr.get(i), p);
+                        }
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+
+    /**
+     * constInitVal : constExp | (L_BRACE (constInitVal (COMMA constInitVal)*)? R_BRACE) ;
+     */
+    @Override
     public Void visitConstInitVal(miniSysYParser.ConstInitValContext ctx) {
-        return super.visitConstInitVal(ctx);
+        if ((ctx.constExp() != null) && ctx.dimInfo_ == null) {
+            visit(ctx.constExp());
+        } else {
+            var curDimLength = ctx.dimInfo_.get(0);
+            var sizeOfEachEle = 1;//&#x6BCF;&#x4E2A;&#x5143;&#x7D20;&#xFF08;i32&#x6216;&#x8005;&#x662F;&#x6570;&#x7EC4;&#xFF09;&#x7684;&#x957F;&#x5EA6;
+            var arrOfCurDim = new ArrayList<Value>();//
+            //calculate Size of Ele in cur dim
+            for (int i = 1; i < ctx.dimInfo_.size(); i++) {
+                sizeOfEachEle *= ctx.dimInfo_.get(i);
+            }
+            for (ConstInitValContext constInitValContext : ctx.constInitVal()) {
+                if (constInitValContext.constExp() == null) {
+                    var pos = arrOfCurDim.size();
+                    for (int i = 0; i < (sizeOfEachEle - (pos % sizeOfEachEle)) % sizeOfEachEle; i++) {
+                        arrOfCurDim.add(CONST0);//长度不足一个ele的补0为一个ele长
+                    }
+                    constInitValContext.dimInfo_ = new ArrayList<>(
+                            ctx.dimInfo_.subList(1, ctx.dimInfo_.size()));
+                    visit(constInitValContext);
+                    arrOfCurDim.addAll(tmpArr_);
+                } else {
+                    visit(constInitValContext);
+                    arrOfCurDim.add(tmp_);
+                }
+            }
+            for (int i = arrOfCurDim.size(); i < curDimLength * sizeOfEachEle; i++) {
+                arrOfCurDim.add(CONST0);
+            }//长度不足一个ele*dimsize 的补0
+            tmpArr_ = arrOfCurDim;
+        }
+        return null;
     }
 
 
     @Override
     public Void visitVarDef(miniSysYParser.VarDefContext ctx) {
-// TODO: 2021/12/21
+        var varName = ctx.IDENT().getText();
+        if (scope.top().get(varName) != null) throw new RuntimeException("name exists");
+        if (ctx.constExp().isEmpty()) {
+            if (scope.isGlobal()) {
+                if (ctx.initVal() != null) {
+                    globalInit_ = true;
+                    visit(ctx.initVal());
+                    globalInit_ = false;
+                    var initializer = (Constant) tmp_;
+                    var v = builder.getGlobalVariable(varName, i32Type_, initializer);
+                    scope.put(varName, v);
+                } else {
+                    var initializer = CONST0;
+                    var v = builder.getGlobalVariable(varName, i32Type_, initializer);
+                    scope.put(varName, v);
+                }
+            } else {
+                var allocator = builder.buildAlloca(i32Type_);
+                scope.put(varName, allocator);
+                if (ctx.initVal() != null) {
+                    visit(ctx.initVal());
+                    builder.buildStore(tmp_, allocator);
+                }
+            }
+        } else {//array
+            var arrTy = i32Type_;
+            var dims = new ArrayList<Integer>();
+            ctx.constExp().forEach(context -> {
+                visit(context);
+                dims.add(((Constant.ConstantInt) tmp_).getVal());
+            });
+            for (var i = dims.size(); i > 0; i--) {
+                arrTy = new ArrayType(arrTy, dims.get(i - 1));
+            }
+            if (scope.isGlobal()) {
+                if (ctx.initVal() != null) {
+                    ctx.initVal().dimInfo_ = dims;
+                    globalInit_ = true;
+                    visit(ctx.initVal());
+                    globalInit_ = false;
+                    var arr = tmpArr_;
+                    ArrayList<Constant> g = new ArrayList<>();
+                    arr.forEach(i -> g.add(((Constant.ConstantInt) i)));
+                    var init = genConstArr(dims, arr);
+                    var glo = builder.getGlobalVariable(ctx.IDENT().getText(), arrTy, init);
+                    scope.put(ctx.IDENT().getText(), glo);
+                } else {
+                    var v = builder.getGlobalVariable(ctx.IDENT().getText(), arrTy, null);
+                    scope.put(ctx.IDENT().getText(), v);
+                }
+            } else {
+                var alloc = builder.buildAlloca(arrTy);
+                scope.put(ctx.IDENT().getText(), alloc);
+                if (ctx.initVal() != null && !ctx.initVal().initVal().isEmpty()) {
+                    alloc.setInit();
+                    ctx.initVal().dimInfo_ = dims;
+                    visit(ctx.initVal());
+                    var arr = tmpArr_;
+                    var pointer = builder.buildGEP(alloc, new ArrayList<>() {{
+                        add(CONST0);
+                        add(CONST0);
+                    }});
+                    builder.buildCall(((Function) scope.find("memset")), new ArrayList<>(Arrays.asList(pointer, CONST0, Constant.ConstantInt.get(arr.size() * 4))));
+                    for (int i = 0; i < arr.size(); i++) {
+                        var t = arr.get(i);
+                        if (t instanceof Constant.ConstantInt o && o.getVal() == 0) continue;
+                        if (i != 0) {
+                            int finalI = i;
+                            var ptr = builder.buildGEP(pointer, new ArrayList<>() {{
+                                add(Constant.ConstantInt.get(finalI));
+                            }});
+                            builder.buildStore(t, ptr);
+                        } else {
+                            builder.buildStore(t, pointer);
+                        }
+                    }
+                } else if (ctx.initVal() != null && ctx.initVal().initVal().isEmpty()) {
+                    var size = 1;
+                    for (Integer dim : dims) size *= dim;
+                    var pointer = builder.buildGEP(alloc, new ArrayList<>() {{
+                        add(CONST0);
+                        add(CONST0);
+                    }});
+                    for (int i = 1; i < dims.size(); i++) {
+                        pointer = builder.buildGEP(pointer, new ArrayList<>() {{
+                            add(CONST0);
+                            add(CONST0);
+                        }});
+                    }
+                    builder.buildCall((Function) scope.find("memset"), new ArrayList<>(
+                            Arrays.asList(pointer, CONST0, Constant.ConstantInt.get(size * 4))));
+                }
+            }
 
+        }
         return null;
     }
 

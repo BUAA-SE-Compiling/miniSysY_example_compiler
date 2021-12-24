@@ -8,7 +8,7 @@ import java.util.HashMap;
 public class Scope {
     private final ArrayList<HashMap<String, Value>> tables;
     public boolean preEnter = false;
-    private HashMap<String,Value>top(){return tables.get(tables.size()-1);}
+    public HashMap<String,Value>top(){return tables.get(tables.size()-1);}
     public void addLayer() {
         if (preEnter) {
             preEnter = false;

@@ -4,6 +4,7 @@ import ir.Module;
 import ir.User;
 import ir.type.PointerType;
 import ir.type.Type;
+
 //全局变量，所有全局变量都是 PointerType的
 public class GlobalVariable extends User {
     public boolean isConst = false;
@@ -13,6 +14,7 @@ public class GlobalVariable extends User {
 
     public GlobalVariable(String name, Type type) {
         super(new PointerType(type));//是地址
+        this.name = name;
         Module.module.globalVariables.add(this);
     }
 

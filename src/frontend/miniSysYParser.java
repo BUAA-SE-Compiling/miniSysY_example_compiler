@@ -501,6 +501,7 @@ public class miniSysYParser extends Parser {
     }
 
     public static class ConstInitValContext extends ParserRuleContext {
+        public ArrayList<Integer> dimInfo_;
         public ConstExpContext constExp() {
             return getRuleContext(ConstExpContext.class, 0);
         }
