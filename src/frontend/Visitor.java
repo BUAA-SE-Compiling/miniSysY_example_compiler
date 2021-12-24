@@ -41,7 +41,7 @@ public class Visitor extends miniSysYBaseVisitor<Void> {
     private final BasicBlock continueMark = new BasicBlock("");
     //回填的用到的数据结构，每解析一层WhileStmt都会push一个ArrayList到Stack中
     //用于处理嵌套循环的break与continue
-    Stack<ArrayList<Br>> backPatchRecord;
+    Stack<ArrayList<Br>> backPatchRecord = new Stack<>();
     /**
      * 我使用全局变量来在函数间进行参数的传递，这么做是为了方便理解代码
      * 你也可以把上面 `extends miniSysYBaseVisitor<Void>` 部分的 `Void`改成`Value`
@@ -281,6 +281,12 @@ public class Visitor extends miniSysYBaseVisitor<Void> {
                         add(CONST0);
                         add(CONST0);
                     }});
+                    for (var i = 1; i < dims.size(); i++) {
+                        pointer = builder.buildGEP(pointer, new ArrayList<>() {{
+                            add(CONST0);
+                            add(CONST0);
+                        }});
+                    }
                     builder.buildCall(((Function) scope.find("memset")), new ArrayList<>(Arrays.asList(pointer, CONST0, Constant.ConstantInt.get(arr.size() * 4))));
                     for (int i = 0; i < arr.size(); i++) {
                         var t = arr.get(i);
@@ -456,6 +462,7 @@ public class Visitor extends miniSysYBaseVisitor<Void> {
                 usingInt_ = false;
                 type = new ArrayType(type, tmpInt_);
             }
+            tmpTy_ = new PointerType(type);
         } else {//这个param是int值
             tmpTy_ = i32Type_;
         }
@@ -522,6 +529,7 @@ public class Visitor extends miniSysYBaseVisitor<Void> {
         builder.buildBr(whileCondEntryBlock);//在parentBB末尾插入一个跳转到whileCond的Br
         ctx.cond().falseblock = nxtBlock;
         ctx.cond().trueblock = trueBlock;
+        builder.setInsertPoint(whileCondEntryBlock);
         visit(ctx.cond());
         builder.setInsertPoint(trueBlock);
         visit(ctx.stmt());
@@ -621,6 +629,7 @@ public class Visitor extends miniSysYBaseVisitor<Void> {
                         add(tmp_);
                     }});
                 }
+                tmp_ = gep;
             }
         }
         if (ARR) {
@@ -748,7 +757,7 @@ public class Visitor extends miniSysYBaseVisitor<Void> {
             for (int i = 0; i < argsCtx.size(); i++) {
                 var argument = argsCtx.get(i);
                 var paramTy = paramTys.get(i);
-                buildCall = paramTy.isIntegerType();
+                buildCall = !paramTy.isIntegerType();
                 visit(argument.exp());
                 buildCall = false;
                 args.add(tmp_);
@@ -837,7 +846,7 @@ public class Visitor extends miniSysYBaseVisitor<Void> {
     public Void visitRelExp(miniSysYParser.RelExpContext ctx) {
         visit(ctx.addExp(0));
         var lhs = tmp_;
-        for (int i = 0; i < ctx.addExp().size(); i++) {
+        for (int i = 1; i < ctx.addExp().size(); i++) {
             expInRel = false;
             visit(ctx.addExp(i));
             var rhs = tmp_;

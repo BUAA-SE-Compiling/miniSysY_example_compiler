@@ -15,7 +15,7 @@ import util.IList.INode;
 public class Inst extends User {
     public TAG tag;
     public INode<Inst, BasicBlock> node;
-
+    public boolean needname = true;
     public BasicBlock getBB() {return this.node.getParent().getVal();}
 
     public Inst(Type type, TAG tag, int numOP) {

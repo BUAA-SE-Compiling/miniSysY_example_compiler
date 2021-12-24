@@ -25,6 +25,11 @@ public class Type {
 
         public static VoidType getType() {return type;}
 
+        @Override
+        public String toString() {
+            return "void";
+        }
+
         private VoidType() {}
     }
 
@@ -35,6 +40,11 @@ public class Type {
         }
 
         private static LabelType type = new LabelType();
+
+        @Override
+        public String toString() {
+            return "label ";
+        }
 
         private LabelType() {}
     }

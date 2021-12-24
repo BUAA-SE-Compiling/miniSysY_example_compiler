@@ -8,8 +8,8 @@ public class BinaryInst extends Inst {
 
     public BinaryInst(Type type, TAG tag, Value lhs, Value rhs) {
         super(type, tag, 2);
-        if (this.isLogicalBinary()) type = IntegerType.getI1();
-        if (this.isArithmeticBinary()) type = IntegerType.getI32();
+        if (this.isLogicalBinary()) this.type = IntegerType.getI1();
+        if (this.isArithmeticBinary()) this.type = IntegerType.getI32();
         this.setOperand(lhs, 0);
         this.setOperand(rhs, 1);
     }

@@ -26,6 +26,7 @@ public class Function extends Value {
         paramList = new ArrayList<>();
         caller = new ArrayList<>();
         callee = new ArrayList<>();
+        this.isBuiltin = isBuiltin;
         buildParams();
     }
 
@@ -40,6 +41,11 @@ public class Function extends Value {
     public ArrayList<Param> getParamList() {
         return paramList;
     }
+
+    public boolean isBuiltin() {
+        return isBuiltin;
+    }
+
 
     //形参，记录各位置类型，不含值
     public class Param extends Value {

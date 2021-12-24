@@ -6,17 +6,18 @@ import ir.User.Use;
 import java.util.LinkedList;
 
 /*
-* LLVM 中 Value Use User 的关系介绍
-* https://buaa-se-compiling.github.io/miniSysY-tutorial/pre/design_hints.html
-*/
+ * LLVM 中 Value Use User 的关系介绍
+ * https://buaa-se-compiling.github.io/miniSysY-tutorial/pre/design_hints.html
+ */
 
 /*
  * Value 类，几乎所有实体都是Value的子类
- * 
+ *
  */
 public class Value {
     public Value(Type type) {
         this.type = type;
+        uses = new LinkedList<>();
     }
 
     public Type type;

@@ -7,7 +7,7 @@ import java.util.LinkedList;
 import java.util.Optional;
 
 public class User extends Value {
-    private LinkedList<Use> operands;//联系 User 与 Value 的 Use list,是乱序的，顺序通过 Use 的成员变量 operandRank 来体现
+    private LinkedList<Use> operands = new LinkedList<>();//联系 User 与 Value 的 Use list,是乱序的，顺序通过 Use 的成员变量 operandRank 来体现
     private int numOP = 0;//操作数的数量
 
     public Value getOP(int i) {//这是个 O(n) 的操作，所幸 n 不会太大，而且operands是基本有序的

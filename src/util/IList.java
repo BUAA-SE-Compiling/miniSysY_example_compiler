@@ -35,7 +35,12 @@ public class IList<T, P> implements Iterable<IList.INode<T, P>> {
     public IList(P val) {
         this.val = val;
         head = new INode<>();
+        head.setParent(this);
+
         trailer = new INode<>();
+        trailer.setParent(this);
+        head.succ = trailer;
+        trailer.prev = head;
     }
 
     public int getNumNode() {return numNode;}
@@ -67,7 +72,7 @@ public class IList<T, P> implements Iterable<IList.INode<T, P>> {
 
         @Override
         public INode<T, P> next() {
-            var t = tmp;
+            var t = tmp.succ;
             tmp = tmp.succ;
             return t;
         }
@@ -111,7 +116,7 @@ public class IList<T, P> implements Iterable<IList.INode<T, P>> {
             this.prev = prev;
             this.succ = prev.succ;
             prev.succ = this;
-            this.succ.prev = this;
+            if (this.succ != null) this.succ.prev = this;
         }
 
         //将自己插入目标结点前面
@@ -121,14 +126,14 @@ public class IList<T, P> implements Iterable<IList.INode<T, P>> {
             this.prev = succ.prev;
             this.succ = succ;
             succ.prev = this;
-            this.prev.succ = this;
+            if (this.prev != null) this.prev.succ = this;
         }
 
         //将自己插入目标IList的开头
         public void insertAtEntry(IList<T, P> father) {
             this.setParent(father);
             father.numNode++;
-            insertAsSuccOf(father.head);
+            insertAsPrevOf(father.head);
         }
 
 
@@ -136,15 +141,15 @@ public class IList<T, P> implements Iterable<IList.INode<T, P>> {
         public void insertAtEnd(IList<T, P> father) {
             this.setParent(father);
             father.numNode++;
-            insertAsPrevOf(father.trailer);
+            insertAsSuccOf(father.trailer);
         }
 
         public boolean removeSelf() {
-            if (this.parent==null)return false;
-            this.succ.prev=this.prev;
-            this.prev.succ=this.succ;
+            if (this.parent == null) return false;
+            this.succ.prev = this.prev;
+            this.prev.succ = this.succ;
             this.parent.numNode--;
-            this.parent=null;
+            this.parent = null;
             return true;
         }
     }

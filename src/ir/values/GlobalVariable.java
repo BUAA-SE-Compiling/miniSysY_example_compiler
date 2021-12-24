@@ -23,7 +23,7 @@ public class GlobalVariable extends User {
         StringBuilder sb = new StringBuilder();
         sb.append(this.name).append(" = dso_local ");//gv 肯定有一个名字
         if (isConst) sb.append("constant ");//如果是 constant
-        else sb.append("global");
+        else sb.append("global ");
         var tmp = ((PointerType) this.type);
         if (tmp.getContained().isIntegerType()) {// 这个gv指向的是一个 i32
             sb.append(tmp.getContained().toString());

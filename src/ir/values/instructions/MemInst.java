@@ -108,7 +108,7 @@ public class MemInst {
         Type type = ((PointerType) ptr.type).getContained();
         if (type.isIntegerType()) return type;
         else if (type.isArrayTy()) {
-            for (int i = 0; i < indices.size(); i++) {
+            for (int i = 1; i < indices.size(); i++) {
                 type = ((ArrayType) type).getEleType();
             }
             return type;
@@ -142,7 +142,7 @@ public class MemInst {
                     .append(" ")
                     .append(getOP(0).name)
                     .append(" ");
-            for (int i = 0; i < getNumOP(); i++) {
+            for (int i = 1; i < getNumOP(); i++) {
                 b
                         .append(", ")
                         .append(getOP(i).type)

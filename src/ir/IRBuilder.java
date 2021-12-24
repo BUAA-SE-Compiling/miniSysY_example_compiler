@@ -56,6 +56,7 @@ public class IRBuilder {
     public Function buildFunction(String Fname, FunctionType type, boolean isBuiltin) {
         return new Function(type, isBuiltin) {{
             this.name = Fname;
+            node.setParent(m.functions);
             node.insertAtEnd(m.functions);
         }};
     }
@@ -88,12 +89,27 @@ public class IRBuilder {
 
 
     public TerminatorInst.Br buildBr(BasicBlock tureblock) {
+        if ( curBB.list.getLast().getVal() != null && (curBB.list.getLast().getVal().tag == Inst.TAG.Ret
+                || curBB.list.getLast().getVal().tag == Inst.TAG.Br)) {
+            return null;
+            //防止下面这种情况出现
+            //ret i32 1
+            //br label  %4
+        }
         return new TerminatorInst.Br(tureblock) {{
             this.node.insertAtEnd(curBB.list);
         }};
     }
 
     public TerminatorInst.Br buildBr(Value cond, BasicBlock trueblock, BasicBlock falseblock) {
+
+        if (curBB.list.getLast().getVal() != null && (curBB.list.getLast().getVal().tag == Inst.TAG.Ret
+                || curBB.list.getLast().getVal().tag == Inst.TAG.Br)) {
+            return null;
+            //防止下面这种情况出现
+            //ret i32 1
+            //br label  %4
+        }
         return new TerminatorInst.Br(cond, trueblock, falseblock) {{
             this.node.insertAtEnd(curBB.list);
         }};
